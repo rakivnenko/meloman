@@ -1,0 +1,146 @@
+diff --git a/libraries/ParserCSV.inc b/libraries/ParserCSV.inc
+index 4ddc77a..f2e20ed 100644
+--- a/libraries/ParserCSV.inc
++++ b/libraries/ParserCSV.inc
+@@ -76,6 +76,8 @@ class ParserCSV {
+ 
+   public function __construct() {
+     $this->delimiter = ',';
++    $this->from_encoding = 'UTF-8';
++    $this->to_encoding = 'UTF-8';
+     $this->skipFirstLine = FALSE;
+     $this->columnNames = FALSE;
+     $this->timeout = FALSE;
+@@ -95,6 +97,14 @@ class ParserCSV {
+   }
+ 
+   /**
++   * Set the source file encoding.
++   * By default, UTF-8.
++   */
++  public function setEncoding($encoding) {
++    $this->from_encoding = $encoding;
++  }
++
++  /**
+    * Set this to TRUE if the parser should skip the first line of the CSV text,
+    * which might be desired if the first line contains the column names.
+    * By default, this is set to FALSE and the first line is not skipped.
+@@ -197,7 +207,7 @@ class ParserCSV {
+     for ($lineIterator->rewind($this->startByte); $lineIterator->valid(); $lineIterator->next()) {
+ 
+       // Make really sure we've got lines without trailing newlines.
+-      $line = trim($lineIterator->current(), "\r\n");
++      $line = trim($this->fixEncoding($lineIterator->current()), "\r\n");
+ 
+       // Skip empty lines.
+       if (empty($line)) {
+@@ -237,7 +247,7 @@ class ParserCSV {
+             }
+             // Ok, so, on with fetching the next line, as mentioned above.
+             $currentField .= "\n";
+-            $line = trim($lineIterator->current(), "\r\n");
++            $line = trim($this->fixEncoding($lineIterator->current()), "\r\n");
+             $currentIndex = 0;
+             continue;
+           }
+@@ -325,4 +335,30 @@ class ParserCSV {
+     }
+     return $rows;
+   }
++
++  /**
++   * Converts encoding of input data
++   *
++   * @param $data
++   *   A chunk of data
++   * @return
++   *   Data in correct encoding or throws exceptions if
++   *   detected encoding doesn't match.
++   */
++  private function fixEncoding($data) {
++
++    if (extension_loaded('mbstring')) {
++      $detected_encoding = mb_detect_encoding($data, $this->from_encoding);
++
++      if ($detected_encoding) {
++        // Always convert encoding to UTF-8 protect from SQL errors.
++        $data = mb_convert_encoding($data, $this->to_encoding, $detected_encoding);
++      }
++      else {
++        throw new Exception(t('Source file is not in %encoding encoding.', array('%encoding' => $this->from_encoding)));
++      }
++    }
++
++    return $data;
++  }
+ }
+diff --git a/plugins/FeedsCSVParser.inc b/plugins/FeedsCSVParser.inc
+index 7044440..57e539e 100644
+--- a/plugins/FeedsCSVParser.inc
++++ b/plugins/FeedsCSVParser.inc
+@@ -22,6 +22,7 @@ class FeedsCSVParser extends FeedsParser {
+     $parser = new ParserCSV();
+     $delimiter = $source_config['delimiter'] == 'TAB' ? "\t" : $source_config['delimiter'];
+     $parser->setDelimiter($delimiter);
++    $parser->setEncoding($source_config['encoding']);
+ 
+     $iterator = new ParserCSVIterator($fetcher_result->getFilePath());
+     if (empty($source_config['no_headers'])) {
+@@ -106,6 +107,7 @@ class FeedsCSVParser extends FeedsParser {
+   public function sourceDefaults() {
+     return array(
+       'delimiter' => $this->config['delimiter'],
++      'encoding' => $this->config['encoding'],
+       'no_headers' => $this->config['no_headers'],
+     );
+   }
+@@ -164,6 +166,8 @@ class FeedsCSVParser extends FeedsParser {
+       '#description' => t('Check if the imported CSV file does not start with a header row. If checked, mapping sources must be named \'0\', \'1\', \'2\' etc.'),
+       '#default_value' => isset($source_config['no_headers']) ? $source_config['no_headers'] : 0,
+     );
++    $form['encoding'] = $this->configEncodingForm();
++    $form['encoding']['#default_value'] = isset($source_config['encoding']) ? $source_config['encoding'] : $form['encoding']['#default_value'];
+     return $form;
+   }
+ 
+@@ -173,6 +177,7 @@ class FeedsCSVParser extends FeedsParser {
+   public function configDefaults() {
+     return array(
+       'delimiter' => ',',
++      'encoding' => 'UTF-8',
+       'no_headers' => 0,
+     );
+   }
+@@ -201,6 +206,31 @@ class FeedsCSVParser extends FeedsParser {
+       '#description' => t('Check if the imported CSV file does not start with a header row. If checked, mapping sources must be named \'0\', \'1\', \'2\' etc.'),
+       '#default_value' => $this->config['no_headers'],
+     );
++    $form['encoding'] = $this->configEncodingForm();
++    return $form;
++  }
++
++  public function configEncodingForm() {
++    if (extension_loaded('mbstring')) {
++      // Get the system's list of available encodings.
++      $options = mb_list_encodings();
++      // Make the key/values the same in the array.
++      $options = array_combine($options, $options);
++      // Sort alphabetically not-case sensitive.
++      natcasesort($options);
++      return array(
++        '#type' => 'select',
++        '#title' => t('File encoding'),
++        '#description' => t('Performs character encoding conversion from selected option to UTF-8.'),
++        '#options' => $options,
++        '#default_value' => $this->config['encoding'],
++      );
++    }
++    else {
++      return array(
++        '#markup' => '<em>' . t('PHP <em>mbstring</em> extension must be available for character encoding conversion.') . '</em>',
++      );
++    }
+     return $form;
+   }
+ 
