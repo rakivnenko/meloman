@@ -26,6 +26,9 @@
 /**********************************************
 * 2.2. Zone branding
 **********************************************/
+.zone-branding-wrapper {
+  padding-top: 30px;
+}
 .zone-branding .region-branding {
   clear: both; }
   .zone-branding .region-branding .logo-img {
