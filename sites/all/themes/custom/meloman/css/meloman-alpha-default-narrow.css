@@ -2,6 +2,51 @@
 /* If you are using the default media queries provided by Omega, these styles will also
  *  apply to the normal and widescreen layouts. You may override these styles in the normal
  *  and widescreen CSS files as appropriate. */
+
+/*Front page*/
+
+.front .flexslider {
+  max-width: 620px;
+  margin: 20px auto 40px;
+}
+.front .block-3 {
+  background-size: 140%;
+}
+.front .container-24 .grid-6 {
+  width:220px;
+}
+.front .view-fr.view-display-id-page .views-field-title a {
+  font-weight: 600;
+  font-size: 1.1em;
+}
+.front .view-fr.view-display-id-page li {
+  height: 100px;
+}
+.front .view-fr.view-display-id-page li div.image {
+  float: left;
+  width: 110px;
+}
+.front .view-fr.view-display-id-page li img {
+  display: block;
+  width: 100px;
+  height: 100px;
+}
+.front .block-blog-block-2 {
+  margin:5px 0 0;
+}
+.front .block-4 {
+  background-image: url("../images/vinyl.jpg");
+  background-repeat: no-repeat;
+  background-position: -120px 0;
+  height: 270px;
+  padding: 20px 20px 10px 370px;
+  margin: 0;
+}
+.front .block-4 .content {
+  font-size: 0.85em;
+  font-weight: 400;
+}
+
 /**************************************************
 * --
 * 3. Section content
@@ -16,6 +61,14 @@
   margin-right: 11px}
 .navigation .second-menu ul li a {
   margin-left: 11px}
+
+/* Footer */
+.section-footer ul.menu li.last span {
+  display: none;
+}
+#block-menu-menu-social-connection .content ul.menu {
+  margin: 2px 0 0;
+  text-align: center; }
 
 /*******************************************
 * 3.2.1. Sidebar first

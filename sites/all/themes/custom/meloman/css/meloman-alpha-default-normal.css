@@ -1,5 +1,59 @@
 /* Include Default Variables & Mixins */
 /* End Variables & Mixins */
+
+/*Background*/
+body {
+  background:#22313e url(../images/bg2.jpg) no-repeat;
+  background-size:100%;
+  background-position:center top;
+}
+.zone-branding-wrapper,
+.zone-menu-wrapper {
+  background: rgba(255,255,255,0.7);
+}
+
+/*Front page*/
+.front .flexslider {
+  width: auto;
+  max-width: none;
+  margin: 20px -50px 40px;
+}
+.front .block-2 {
+  padding: 10px 50% 10px 20px;
+  color: #fff;
+  height: 180px;
+  background-color: #EA5F48;
+  background-image: url("../images/rus.png");
+  background-repeat: no-repeat;
+  background-position: right center;
+}
+.front .block-3 {
+  background-size: 100%;
+}
+.front .container-24 .grid-6 {
+  width:300px;
+}
+.front .block-4 {
+  background-image: url("../images/vinyl.jpg");
+  background-repeat: no-repeat;
+  background-position: left;
+  height: 270px;
+  padding: 20px 20px 10px 480px;
+  margin: -20px auto 0;
+}
+.front .block-4 .content {
+  font-size: 1em;
+}
+
+/* Footer */
+.section-footer ul.menu li.last span {
+  display: inline-block;
+}
+
+#block-menu-menu-social-connection .content ul.menu {
+  margin: 2px 0 0;
+  text-align: center; }
+
 /**************************************************
 * --
 * 2. Section header
