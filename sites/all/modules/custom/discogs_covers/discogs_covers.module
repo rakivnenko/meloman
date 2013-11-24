@@ -1,0 +1,143 @@
+<?php
+
+function discogs_covers_menu() {
+    $items = array();
+
+    $items['admin/config/media/discogs'] = array(
+        'title' => 'Discogs covers',
+        'description' => 'Fetch\'em baby, fetch\'em',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('discogs_covers_startform'),
+        'access callback' => TRUE,
+    );
+
+    return $items;
+}
+
+function discogs_covers_startform() {
+    $form = array();
+
+    $form['description'] = array(
+        '#type' => 'markup',
+        '#markup' => '<p> We found %num products without images, should I fetch them?</p>',
+    );
+
+    $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => 'Yeah',
+    );
+
+
+    $dbh = discogs_covers_get_boring_albums();
+
+    $entity_type = 'commerce_product';
+
+    $p = $dbh->fetchCol();
+    $id = $p[0];
+    $p = commerce_product_load($id);
+
+    $src = discogs_covers_fetch_cover_for_album($p);
+    dpm($src);
+
+    $form['cover'] = array(
+        '#type' => 'markup',
+        '#markup' => '<img src="'.$src.'" />',
+    );
+
+    return $form;
+}
+
+function discogs_covers_startform_submit() {
+
+
+}
+
+function discogs_covers_get_boring_albums() {
+    $count_sql =<<<EOSQL
+select count(*) from commerce_product cp
+left join field_data_field_images i on (cp.product_id = i.entity_id AND i.entity_type = 'commerce_product')
+where cp.status = 1 AND i.field_images_fid IS NULL
+EOSQL;
+
+    //$count = db_query($count_sql)->fetchAll();
+
+    $id_sql =<<<EOSQL
+select cp.product_id from commerce_product cp
+left join field_data_field_images i on (cp.product_id = i.entity_id AND i.entity_type = 'commerce_product')
+where cp.status = 1 AND i.field_images_fid IS NULL
+order by rand() -- hehe
+EOSQL;
+
+
+    $dbh = db_query($id_sql);
+
+    return $dbh;
+
+}
+
+function discogs_covers_fetch_cover_for_album($product) {
+    // because it adds own headers to OUTGOING http request
+    // vot pidor
+    if (extension_loaded('newrelic')) {
+      newrelic_end_transaction(true);
+    }
+
+    dpm($product);
+
+
+    $request = array(
+        'type' => 'release',
+        'artist' => $product->field_artist['und'][0]['value'],
+        'title' => $product->field_album_title['und'][0]['value'],
+    );
+
+    $url = 'http://api.discogs.com/database/search';
+    $url .= '?' . http_build_query($request);
+    $search_results = discogs_covers_api_query($url);
+    dpm(array('search_results', $search_results));
+    if (!is_object($search_results) || empty($search_results->results)) {
+        return false;
+    }
+
+    //$catno = $product->field_cat_['und']['0']['value'];
+    //$catno = strtolower($catno);
+    //$catno = preg_replace('/[^\w\d]/', '', $catno);
+
+    foreach ($search_results->results as $res) {
+        //$res_catno = preg_replace('/[^\w\d]/', '', strtolower($res->catno));
+        usleep(950000);
+        dpm(array('release', $res));
+        $release = discogs_covers_api_query($res->resource_url);
+        if (!isset($release->master_url)) {
+            continue;
+        }
+
+        usleep(950000);
+        $master = discogs_covers_api_query($release->master_url);
+        dpm(array('master', $master));
+        foreach ($master->images as $image) {
+            if ($image->type == 'primary') {
+                $result = $image->uri;
+                break 2;
+            }
+        }
+    }
+
+    return isset($result) ? $result : false;
+
+}
+
+function discogs_covers_api_query($url) {
+    $result = drupal_http_request($url, array(
+        'method' => 'GET',
+        'headers' => array(),
+    ));
+
+    if ($result->code != 200) {
+        return false;
+    }
+
+    $data = json_decode($result->data);
+    return $data;
+}
+

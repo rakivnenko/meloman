@@ -1,0 +1,7 @@
+name = Discogs Covers
+description = Awesome discogs covers pizder
+; package = Dummy image
+core = 7.x
+version = 0.0.1
+configure = admin/config/media/discogs
+files[] = discogs_covers.module
