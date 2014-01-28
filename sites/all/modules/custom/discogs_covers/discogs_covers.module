@@ -42,16 +42,16 @@ function discogs_covers_menu() {
     'file' => 'discogs_covers.admin.inc',
     'type' => MENU_LOCAL_TASK,
   );
+  $items['admin/config/media/discogs/clear'] = array(
+    'title' => 'Discogs clear',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('discogs_covers_clearform'),
+    'access arguments' => array('manage discogs'),
+    'file' => 'discogs_covers.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
 
   return $items;
-}
-
-/**
- * Form submit callback
- * Runs batch
- */
-function discogs_covers_startform_submit() {
-  discogs_covers_batch();
 }
 
 function discogs_covers_products_without_image_count() {
@@ -161,6 +161,9 @@ function discogs_covers_next_product(array $exclude = array()) {
 }
 
 function discogs_covers_find_covers($product) {
+  $update = &drupal_static('discogs_covers_update_entity');
+  $update = FALSE;
+
   $artist = field_get_items('commerce_product', $product, 'field_artist');
   $title = field_get_items('commerce_product', $product, 'field_album_title');
 
@@ -358,6 +361,7 @@ function download_external_file($url, $uri, $save_mode = FILE_EXISTS_RENAME, $ma
  */
 function discogs_covers_entity_presave($entity, $type) {
   if ($type == 'commerce_product' &&
+    drupal_static('discogs_covers_update_entity', TRUE) &&
     variable_get('discogs_covers_process_new_entity', FALSE) &&
     !field_get_items($type, $entity, 'field_images')) {
     discogs_covers_find_covers($entity);
