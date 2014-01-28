@@ -193,31 +193,31 @@ function discogs_covers_find_covers($product) {
 
     $maximum_attempts = variable_get('discogs_covers_maximum_fetch_attempts', 5);
 
+    $files_loaded = variable_get('discogs_covers_files_to_fetch', 3);
+
     $resources = array();
 
     foreach ($results as $result) {
       $release = discogs_covers_request_with_delay('client', $result->getResourceUrl());
 
-      $image_loaded = FALSE;
-
       if (empty($release->master_url) || $maximum_attempts < 1) {
         if (!empty($release->images)) {
-          $image_loaded = discogs_covers_load_images($release->images, $product);
-
+          $loaded_count = discogs_covers_load_images($release->images, $product);
+          $files_loaded -= $loaded_count;
           $resources[] = array(
             'url' => $release->uri,
           );
         }
       }
       elseif ($master = discogs_covers_request_with_delay('client', $release->master_url)) {
-        $image_loaded = discogs_covers_load_images($master->images, $product);
-
+        $loaded_count = discogs_covers_load_images($release->images, $product);
+        $files_loaded -= $loaded_count;
         $resources[] = array(
           'url' => $master->uri,
         );
       }
 
-      if (($image_loaded || $maximum_attempts < 1) && $maximum_attempts < 1) {
+      if ($files_loaded < 1 || $maximum_attempts < 1) {
         break;
       }
 
@@ -226,8 +226,8 @@ function discogs_covers_find_covers($product) {
 
     if (!empty($resources)) {
       $product->field_source_link[LANGUAGE_NONE] = $resources;
+      commerce_product_save($product);
     }
-
     return $image_loaded;
   }
   return FALSE;
@@ -281,23 +281,29 @@ function discogs_covers_request_with_delay($whom = 'service', $options) {
  * Save files to the entity
  */
 function discogs_covers_load_images($images, $product) {
-  $loaded = FALSE;
-
   $artist = field_get_items('commerce_product', $product, 'field_artist');
   $title = field_get_items('commerce_product', $product, 'field_album_title');
+
+  $images_to_load = variable_get('discogs_covers_files_to_fetch', 3);
+
+  $loaded = 0;
 
   foreach ($images as $image) {
     $file_info = pathinfo($image->uri);
     if ($file = download_external_file($image->uri, 'public://covers/' . $file_info['filename'] . '.' . $file_info['extension'])) {
       $product->field_images[LANGUAGE_NONE][] = $file;
       commerce_product_save($product);
-      $loaded = TRUE;
+      $loaded++;
     }
     else {
       drupal_set_message(t('Download failed for !artist !title', array(
         '!artist' => $artist[0]['value'],
         '!title' => $title[0]['value'],
       )));
+    }
+
+    if ($loaded == $images_to_load) {
+      break;
     }
   }
 

@@ -29,6 +29,14 @@ function discogs_covers_settings($form, &$form_state) {
     '#default_value' => variable_get('discogs_covers_process_new_entity', FALSE),
   );
 
+  $form['discogs_covers_files_to_fetch'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Images to fetch'),
+    '#description' => t('Specifies how many images should be fetched per entity.'),
+    '#default_value' => variable_get('discogs_covers_files_to_fetch', 3),
+    '#element_validate' => array('element_validate_integer_positive'),
+  );
+
   $form['discogs_covers_maximum_fetch_attempts'] = array(
     '#type' => 'textfield',
     '#title' => t('Maximum fetch attempts'),
