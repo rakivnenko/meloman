@@ -1,0 +1,13 @@
+{
+    "name": "tim/discogs_covers",
+    "minimum-stability": "dev",
+    "authors": [
+        {
+            "name": "Temoor Gilmutdinov",
+            "email": "temoor.gilmutdinov@propeople.com.ua"
+        }
+    ],
+    "require": {
+      "ricbra/php-discogs-api": "dev-master"
+    }
+}

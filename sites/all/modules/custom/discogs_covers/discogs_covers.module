@@ -1,143 +1,359 @@
 <?php
 
+/**
+ * Implements hook_permission().
+ */
+function discogs_covers_permission() {
+  return array(
+    'manage discogs' => array(
+      'title' => t('Administer discogs'),
+      'description' => t('Perform administration tasks for discogs'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu()
+ */
 function discogs_covers_menu() {
-    $items = array();
+  $items = array();
 
-    $items['admin/config/media/discogs'] = array(
-        'title' => 'Discogs covers',
-        'description' => 'Fetch\'em baby, fetch\'em',
-        'page callback' => 'drupal_get_form',
-        'page arguments' => array('discogs_covers_startform'),
-        'access callback' => TRUE,
-    );
+  $items['admin/config/media/discogs'] = array(
+    'title' => 'Discogs covers',
+    'description' => 'Fetch covers from Discogs service by title, author etc.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('discogs_covers_startform'),
+    'access arguments' => array('manage discogs'),
+    'file' => 'discogs_covers.admin.inc',
+  );
+  $items['admin/config/media/discogs/batch'] = array(
+    'title' => 'Discogs process',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('discogs_covers_startform'),
+    'access arguments' => array('manage discogs'),
+    'file' => 'discogs_covers.admin.inc',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/config/media/discogs/settings'] = array(
+    'title' => 'Discogs settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('discogs_covers_settings'),
+    'access arguments' => array('manage discogs'),
+    'file' => 'discogs_covers.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
 
-    return $items;
+  return $items;
 }
 
-function discogs_covers_startform() {
-    $form = array();
-
-    $form['description'] = array(
-        '#type' => 'markup',
-        '#markup' => '<p> We found %num products without images, should I fetch them?</p>',
-    );
-
-    $form['submit'] = array(
-        '#type' => 'submit',
-        '#value' => 'Yeah',
-    );
-
-
-    $dbh = discogs_covers_get_boring_albums();
-
-    $entity_type = 'commerce_product';
-
-    $p = $dbh->fetchCol();
-    $id = $p[0];
-    $p = commerce_product_load($id);
-
-    $src = discogs_covers_fetch_cover_for_album($p);
-    dpm($src);
-
-    $form['cover'] = array(
-        '#type' => 'markup',
-        '#markup' => '<img src="'.$src.'" />',
-    );
-
-    return $form;
-}
-
+/**
+ * Form submit callback
+ * Runs batch
+ */
 function discogs_covers_startform_submit() {
-
-
+  discogs_covers_batch();
 }
 
-function discogs_covers_get_boring_albums() {
-    $count_sql =<<<EOSQL
-select count(*) from commerce_product cp
-left join field_data_field_images i on (cp.product_id = i.entity_id AND i.entity_type = 'commerce_product')
-where cp.status = 1 AND i.field_images_fid IS NULL
-EOSQL;
+function discogs_covers_products_without_image_count() {
+  $query = db_select('commerce_product', 'cp');
+  $query->addJoin('LEFT', 'field_data_field_images', 'image', 'cp.product_id = image.entity_id');
+  $query->condition('image.entity_id', null, 'IS');
+  $query->addExpression('count(cp.product_id)', 'count');
 
-    //$count = db_query($count_sql)->fetchAll();
+  $result = $query->execute()->fetchAssoc();
 
-    $id_sql =<<<EOSQL
-select cp.product_id from commerce_product cp
-left join field_data_field_images i on (cp.product_id = i.entity_id AND i.entity_type = 'commerce_product')
-where cp.status = 1 AND i.field_images_fid IS NULL
-order by rand() -- hehe
-EOSQL;
-
-
-    $dbh = db_query($id_sql);
-
-    return $dbh;
-
+  return empty($result) ? 0 : array_pop($result);
 }
 
-function discogs_covers_fetch_cover_for_album($product) {
-    // because it adds own headers to OUTGOING http request
-    // vot pidor
-    if (extension_loaded('newrelic')) {
-      newrelic_end_transaction(true);
+/**
+ * Batch init method
+ */
+function discogs_covers_batch() {
+  $batch = array(
+    'operations' => array(
+      array('discogs_covers_batch_process', array()),
+    ),
+    'finished' => 'discogs_covers_batch_finished',
+    'title' => t('Discogs Covers Batch'),
+    'init_message' => t('Started processing products without images.'),
+    'progress_message' => t('Fetching images from discogs...'),
+    'error_message' => t('Error encountered during process.'),
+  );
+  batch_set($batch);
+}
+
+/**
+ * Batch process callback
+ */
+function discogs_covers_batch_process(&$context) {
+  if (!isset($context['sandbox']['progress'])) {
+    $context['sandbox']['exclude'] = array();
+    $context['sandbox']['current_product'] = 0;
+    $context['sandbox']['progress'] = 0;
+    $context['results'] = array();
+    $context['sandbox']['max'] = discogs_covers_products_without_image_count();
+  }
+
+  if ($product_id = discogs_covers_next_product($context['sandbox']['exclude'])) {
+    $context['sandbox']['exclude'][] = $product_id;
+    $product = commerce_product_load($product_id);
+
+    $artist = field_get_items('commerce_product', $product, 'field_artist');
+    $title = field_get_items('commerce_product', $product, 'field_album_title');
+
+    if (discogs_covers_find_covers($product)) {
+      $context['results'][] = $artist[0]['value'] . '-' . $title[0]['value'];
+      $context['message'] = t('Cover fetched for !artist - !title.', array(
+        '!artist' => $artist[0]['value'],
+        '!title' => $title[0]['value'],
+      ));
     }
+    else {
+      $context['message'] = t('Cover for !artist - !title not found.', array(
+        '!artist' => $artist[0]['value'],
+        '!title' => $title[0]['value'],
+      ));
+    }
+  }
+  else {
+    drupal_set_message(t('Could not load product.'));
+  }
 
-    dpm($product);
+  $context['sandbox']['progress']++;
 
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+}
 
-    $request = array(
-        'type' => 'release',
-        'artist' => $product->field_artist['und'][0]['value'],
-        'title' => $product->field_album_title['und'][0]['value'],
+/**
+ * Batch finished callback
+ */
+function discogs_covers_batch_finished($success, $results, $operations) {
+  if ($success) {
+    $message = count($results) .' processed.';
+    $message .= theme('item_list', $results);
+    drupal_set_message($message);
+  }
+  else {
+    $error_operation = reset($operations);
+    $message = t('An error occurred while processing %error_operation with arguments: @arguments', array('%error_operation' => $error_operation[0], '@arguments' => print_r($error_operation[1], TRUE)));
+    drupal_set_message($message, 'error');
+  }
+}
+
+/**
+ * Get next product without image
+ */
+function discogs_covers_next_product(array $exclude = array()) {
+  $query = db_select('commerce_product', 'cp');
+  $query->addJoin('LEFT', 'field_data_field_images', 'image', 'cp.product_id = image.entity_id');
+  $query->fields('cp', array('product_id'));
+  $query->condition('image.entity_id', null, 'IS');
+  if (!empty($exclude)) {
+    $query->condition('cp.product_id', $exclude, 'NOT IN');
+  }
+  $query->range(0, 1);
+
+  $result = $query->execute()->fetchAssoc();
+
+  return array_pop($result);
+}
+
+function discogs_covers_find_covers($product) {
+  $artist = field_get_items('commerce_product', $product, 'field_artist');
+  $title = field_get_items('commerce_product', $product, 'field_album_title');
+
+  $catno = field_get_items('commerce_product', $product, 'field_cat_');
+
+  $options = array(
+    'type' => 'release',
+    'catno' => $catno[0]['value'],
+  );
+
+  if (!empty($catno)) {
+    $response = discogs_covers_request_with_delay('service', $options);
+    $results = $response->getResults();
+  }
+
+  if (empty($results)) {
+    $options = array(
+      'type' => 'release',
+      'artist' => $artist[0]['value'],
+      'title' => $title[0]['value'],
     );
 
-    $url = 'http://api.discogs.com/database/search';
-    $url .= '?' . http_build_query($request);
-    $search_results = discogs_covers_api_query($url);
-    dpm(array('search_results', $search_results));
-    if (!is_object($search_results) || empty($search_results->results)) {
-        return false;
+    $response = discogs_covers_request_with_delay('service', $options);
+    $results = $response->getResults();
+  }
+
+  if (!empty($results)) {
+
+    $image_loaded = FALSE;
+
+    $maximum_attempts = variable_get('discogs_covers_maximum_fetch_attempts', 5);
+
+    $resources = array();
+
+    foreach ($results as $result) {
+      $release = discogs_covers_request_with_delay('client', $result->getResourceUrl());
+
+      $image_loaded = FALSE;
+
+      if (empty($release->master_url) || $maximum_attempts < 1) {
+        if (!empty($release->images)) {
+          $image_loaded = discogs_covers_load_images($release->images, $product);
+
+          $resources[] = array(
+            'url' => $release->uri,
+          );
+        }
+      }
+      elseif ($master = discogs_covers_request_with_delay('client', $release->master_url)) {
+        $image_loaded = discogs_covers_load_images($master->images, $product);
+
+        $resources[] = array(
+          'url' => $master->uri,
+        );
+      }
+
+      if (($image_loaded || $maximum_attempts < 1) && $maximum_attempts < 1) {
+        break;
+      }
+
+      $maximum_attempts--;
     }
 
-    //$catno = $product->field_cat_['und']['0']['value'];
-    //$catno = strtolower($catno);
-    //$catno = preg_replace('/[^\w\d]/', '', $catno);
-
-    foreach ($search_results->results as $res) {
-        //$res_catno = preg_replace('/[^\w\d]/', '', strtolower($res->catno));
-        usleep(950000);
-        dpm(array('release', $res));
-        $release = discogs_covers_api_query($res->resource_url);
-        if (!isset($release->master_url)) {
-            continue;
-        }
-
-        usleep(950000);
-        $master = discogs_covers_api_query($release->master_url);
-        dpm(array('master', $master));
-        foreach ($master->images as $image) {
-            if ($image->type == 'primary') {
-                $result = $image->uri;
-                break 2;
-            }
-        }
+    if (!empty($resources)) {
+      $product->field_source_link[LANGUAGE_NONE] = $resources;
     }
 
-    return isset($result) ? $result : false;
-
+    return $image_loaded;
+  }
+  return FALSE;
 }
 
-function discogs_covers_api_query($url) {
-    $result = drupal_http_request($url, array(
-        'method' => 'GET',
-        'headers' => array(),
-    ));
+/**
+ * There should be a delay in one second between two subsequent requests
+ */
+function discogs_covers_request_with_delay($whom = 'service', $options) {
+  $apis = &drupal_static(__FUNCTION__);
 
-    if ($result->code != 200) {
-        return false;
+  if (empty($apis['last_exec'])) {
+    usleep(1000000);
+    $apis['last_exec'] = 0;
+  }
+
+  if (empty($apis['client'])) {
+    $apis['client'] = new Discogs\Client();
+  }
+
+  if (empty($apis['service'])) {
+    $apis['service'] = new Discogs\Service($apis['client']);
+  }
+
+  if (1 - microtime(TRUE) + $apis['last_exec'] > 0) {
+    usleep((integer)((1 - microtime(TRUE) + $apis['last_exec']) * 1000000));
+  }
+
+  $result = FALSE;
+
+  try {
+    switch ($whom) {
+      case 'client':
+        $result = $apis[$whom]->call($options);
+        break;
+      default:
+        $result = $apis[$whom]->search($options);
+        break;
     }
+  }
+  catch (Exception $e) {
+    drupal_set_message($e->getMessage(), 'error');
+  }
 
-    $data = json_decode($result->data);
-    return $data;
+  $apis['last_exec'] = microtime(TRUE);
+
+  return $result;
 }
 
+/**
+ * Save files to the entity
+ */
+function discogs_covers_load_images($images, $product) {
+  $loaded = FALSE;
+
+  $artist = field_get_items('commerce_product', $product, 'field_artist');
+  $title = field_get_items('commerce_product', $product, 'field_album_title');
+
+  foreach ($images as $image) {
+    $file_info = pathinfo($image->uri);
+    if ($file = download_external_file($image->uri, 'public://covers/' . $file_info['filename'] . '.' . $file_info['extension'])) {
+      $product->field_images[LANGUAGE_NONE][] = $file;
+      commerce_product_save($product);
+      $loaded = TRUE;
+    }
+    else {
+      drupal_set_message(t('Download failed for !artist !title', array(
+        '!artist' => $artist[0]['value'],
+        '!title' => $title[0]['value'],
+      )));
+    }
+  }
+
+  return $loaded;
+}
+
+/**
+ *
+ * param string $url
+ *    Full url to file to download
+ * param string $uri
+ *    Drupal uri of where to save file public://archive/test.pdf
+ * param int $save_mode
+ *    File save mode from drupal core, ex FILE_EXISTS_REPLACE
+ */
+function download_external_file($url, $uri, $save_mode = FILE_EXISTS_RENAME, $manage_file = TRUE) {
+  $url_info = parse_url($url);
+  $url_path_info = pathinfo($url_info['path']);
+
+  //This helps with filenames with spaces
+  $url = $url_info['scheme'] . '://' . $url_info['host']  . $url_path_info['dirname'] .'/'. rawurlencode($url_path_info['basename']);
+
+  //Need to remove the filename from the uri
+  $uri_target = file_uri_target($uri);
+  $uri_scheme = file_uri_scheme($uri);
+  $uri_path_info = pathinfo($uri_target);
+  $directory = file_stream_wrapper_uri_normalize($uri_scheme . "://" . $uri_path_info['dirname']);
+
+  if(file_prepare_directory($directory, FILE_CREATE_DIRECTORY)) {
+    $drupal_result = drupal_http_request($url);
+    if(!empty($drupal_result->data)) {
+      $path = file_stream_wrapper_uri_normalize($uri);
+      if($manage_file) {
+        $new_file = file_save_data($drupal_result->data, $path, $save_mode);
+      } else {
+        return file_unmanaged_save_data($drupal_result->data, $path, $save_mode);
+      }
+    } else {
+      drupal_set_message("Error downloading file, no data received for " . $url);
+      return FALSE;
+    }
+
+    $new_file->display = 1;
+    return (array)$new_file;
+  } else {
+    drupal_set_message("Could not create directory");
+  }
+}
+
+/**
+ * Implements hook_entity_presave
+ */
+function discogs_covers_entity_presave($entity, $type) {
+  if ($type == 'commerce_product' &&
+    variable_get('discogs_covers_process_new_entity', FALSE) &&
+    !field_get_items($type, $entity, 'field_images')) {
+    discogs_covers_find_covers($entity);
+  }
+}

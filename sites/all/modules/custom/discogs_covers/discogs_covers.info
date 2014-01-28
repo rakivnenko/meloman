@@ -5,3 +5,7 @@ core = 7.x
 version = 0.0.1
 configure = admin/config/media/discogs
 files[] = discogs_covers.module
+
+dependencies[] = entity
+dependencies[] = commerce_product
+dependencies[] = composer_manager
