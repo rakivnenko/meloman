@@ -231,7 +231,7 @@ function discogs_covers_find_covers($product) {
       $product->field_source_link[LANGUAGE_NONE] = $resources;
       commerce_product_save($product);
     }
-    return $image_loaded;
+    return $files_loaded != variable_get('discogs_covers_files_to_fetch', 3);
   }
   return FALSE;
 }
