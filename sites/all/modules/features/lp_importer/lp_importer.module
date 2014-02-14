@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the LP importer feature.
+ */
+
+include_once 'lp_importer.features.inc';
