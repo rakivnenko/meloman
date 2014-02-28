@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the CD Ru Importer feature.
+ */
+
+include_once 'cd_ru_importer.features.inc';

@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the CD Stamps importer feature.
+ */
+
+include_once 'cd_stamps_importer.features.inc';

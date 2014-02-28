@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the CD Cyr importer feature.
+ */
+
+include_once 'cd_cyr_importer.features.inc';
