@@ -1,0 +1,72 @@
+<?php
+
+function discogs_covers_schema() {
+  $schema = array(
+    'discogs_exclude' => array(
+      'description' => 'List of products to exclude from next execution',
+      'fields' => array(
+        'entity_id' => array(
+          'description' => 'The primary identifier for entity.',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'type' => array(
+          'description' => 'Type of this entity.',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+          'default' => '',
+        ),
+        'bundle' => array(
+          'description' => 'Bundle of this entity.',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+          'default' => '',
+        ),
+      ),
+      'indexes' => array(
+        'entity_id' => array('entity_id'),
+      ),
+      'primary key' => array('type', 'entity_id'),
+    ),
+  );
+
+  return $schema;
+}
+
+function discogs_covers_update_7000() {
+  $schema = array(
+    'discogs_exclude' => array(
+      'description' => 'List of products to exclude from next execution',
+      'fields' => array(
+        'entity_id' => array(
+          'description' => 'The primary identifier for entity.',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'type' => array(
+          'description' => 'Type of this entity.',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+          'default' => '',
+        ),
+        'bundle' => array(
+          'description' => 'Bundle of this entity.',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+          'default' => '',
+        ),
+      ),
+      'indexes' => array(
+        'entity_id' => array('entity_id'),
+      ),
+      'primary key' => array('type', 'entity_id'),
+    ),
+  );
+  db_create_table('discogs_exclude', $schema['discogs_exclude']);
+}

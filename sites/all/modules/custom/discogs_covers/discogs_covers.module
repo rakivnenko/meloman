@@ -56,7 +56,9 @@ function discogs_covers_menu() {
 
 function discogs_covers_products_without_image_count() {
   $query = db_select('commerce_product', 'cp');
+  $query->addJoin('LEFT', 'discogs_exclude', 'de', '(de.type = \'commerce_product\') AND (cp.type = de.bundle) AND (cp.product_id = de.entity_id)');
   $query->addJoin('LEFT', 'field_data_field_images', 'image', 'cp.product_id = image.entity_id');
+  $query->condition('de.entity_id', null, 'IS');
   $query->condition('image.entity_id', null, 'IS');
   $query->addExpression('count(cp.product_id)', 'count');
 
@@ -87,15 +89,13 @@ function discogs_covers_batch() {
  */
 function discogs_covers_batch_process(&$context) {
   if (!isset($context['sandbox']['progress'])) {
-    $context['sandbox']['exclude'] = array();
     $context['sandbox']['current_product'] = 0;
     $context['sandbox']['progress'] = 0;
     $context['results'] = array();
     $context['sandbox']['max'] = discogs_covers_products_without_image_count();
   }
 
-  if ($product_id = discogs_covers_next_product($context['sandbox']['exclude'])) {
-    $context['sandbox']['exclude'][] = $product_id;
+  if ($product_id = discogs_covers_next_product()) {
     $product = commerce_product_load($product_id);
 
     $artist = field_get_items('commerce_product', $product, 'field_artist');
@@ -109,6 +109,12 @@ function discogs_covers_batch_process(&$context) {
       ));
     }
     else {
+      $query = db_insert('discogs_exclude');
+      $query->fields(array('entity_id', 'type', 'bundle'));
+      $query->values(array($product->product_id, 'commerce_product', $product->type));
+
+      $query->execute();
+
       $context['message'] = t('Cover for !artist - !title not found.', array(
         '!artist' => $artist[0]['value'],
         '!title' => $title[0]['value'],
@@ -145,14 +151,14 @@ function discogs_covers_batch_finished($success, $results, $operations) {
 /**
  * Get next product without image
  */
-function discogs_covers_next_product(array $exclude = array()) {
+function discogs_covers_next_product() {
   $query = db_select('commerce_product', 'cp');
+  $query->addJoin('LEFT', 'discogs_exclude', 'de', '(de.type = \'commerce_product\') AND (cp.type = de.bundle) AND (cp.product_id = de.entity_id)');
   $query->addJoin('LEFT', 'field_data_field_images', 'image', 'cp.product_id = image.entity_id');
   $query->fields('cp', array('product_id'));
+  $query->condition('de.entity_id', null, 'IS');
   $query->condition('image.entity_id', null, 'IS');
-  if (!empty($exclude)) {
-    $query->condition('cp.product_id', $exclude, 'NOT IN');
-  }
+
   $query->range(0, 1);
 
   $result = $query->execute()->fetchAssoc();
@@ -213,11 +219,16 @@ function discogs_covers_find_covers($product) {
         }
       }
       elseif ($master = discogs_covers_request_with_delay('client', $release->master_url)) {
-        $loaded_count = discogs_covers_load_images($release->images, $product);
-        $files_loaded -= $loaded_count;
-        $resources[] = array(
-          'url' => $master->uri,
-        );
+        if (!empty($master->images)) {
+          $loaded_count = discogs_covers_load_images($master->images, $product);
+          $files_loaded -= $loaded_count;
+          $resources[] = array(
+            'url' => $master->uri,
+          );
+        }
+        else {
+          watchdog('discogs_import', 'Product %product_id has no images in master url', array('%product_id' => $product->product_id), WATCHDOG_DEBUG);
+        }
       }
 
       if ($files_loaded < 1 || $maximum_attempts < 1) {
