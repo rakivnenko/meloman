@@ -73,16 +73,6 @@ function dvd_importer_feeds_importer_default() {
             'target' => 'commerce_price:amount',
             'unique' => FALSE,
           ),
-          6 => array(
-            'source' => 'Information',
-            'target' => 'field_information',
-            'unique' => FALSE,
-          ),
-          7 => array(
-            'source' => 'Title',
-            'target' => 'title',
-            'unique' => FALSE,
-          ),
         ),
         'update_existing' => '0',
         'input_format' => 'plain_text',
